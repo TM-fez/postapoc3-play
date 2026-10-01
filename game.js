@@ -8,7 +8,9 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 
 const $ = id => document.getElementById(id);
-window.addEventListener('error', e => { const b = $('err'); if (b) b.textContent += e.message + '\n'; });
+window.addEventListener('error', e => { try{ (window.__dbgLog||console.log)('error', e.message+' @'+(e.filename||'').split('/').pop()+':'+e.lineno) }catch(_){} });
+const setProg = (p,t) => { try{ window.__prog && window.__prog(p,t) }catch(_){} };
+const stage = (p,t) => { setProg(p,t); return new Promise(r=>setTimeout(r,30)) };   // lets the browser paint the loading bar between heavy steps
 const Q = new URLSearchParams(location.search);
 const isTouch = matchMedia('(pointer:coarse)').matches || 'ontouchstart' in window;
 const MOBILE = Q.get('mobile') === '1' || isTouch;
@@ -61,30 +63,35 @@ gl_FragColor.rgb = mix( gl_FragColor.rgb, fogColor, fogFactor );
 
 // ============================================================ renderer
 const canvas=$('c');
-const renderer=new THREE.WebGLRenderer({canvas,antialias:!usePost&&!MOBILE,powerPreference:'high-performance'});
-const PR=Math.min(window.devicePixelRatio||1,MOBILE?1.5:1.5);
+let renderer;
+try{renderer=new THREE.WebGLRenderer({canvas,antialias:!usePost&&!MOBILE,powerPreference:'high-performance'})}
+catch(e){ if(window.__fail)window.__fail('Your browser could not start WebGL graphics. Try Chrome or Safari, and make sure hardware acceleration / data saver is not blocking it.'); throw e }
+const PR_MAX=Math.min(window.devicePixelRatio||1,MOBILE?1.25:1.5);
+let PR=PR_MAX;
 renderer.setPixelRatio(PR);
+canvas.addEventListener('webglcontextlost',e=>{e.preventDefault();if(window.__fail)window.__fail('The graphics context was lost (phone ran out of GPU memory?). Reloading…');setTimeout(()=>location.reload(),2500)});
 renderer.setSize(innerWidth,innerHeight,false);
 renderer.shadowMap.enabled=true;
-renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+renderer.shadowMap.type=MOBILE?THREE.PCFShadowMap:THREE.PCFSoftShadowMap;
 renderer.outputColorSpace=THREE.SRGBColorSpace;
 renderer.toneMapping=THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure=Number(Q.get('exp')||1.55);
+renderer.toneMappingExposure=Number(Q.get('exp')||(MOBILE?1.4:1.55));
 const MAXANI=Math.min(8,renderer.capabilities.getMaxAnisotropy());
 
 const scene=new THREE.Scene();
 const FOGC=new THREE.Color(0xb59676);
 scene.background=FOGC.clone();
-scene.fog=new THREE.FogExp2(FOGC.getHex(),0.0021);
+scene.fog=new THREE.FogExp2(FOGC.getHex(),MOBILE?0.0015:0.0021);   // lighter fog on phones so distant hills keep their colour
 const camera=new THREE.PerspectiveCamera(60,innerWidth/innerHeight,0.15,2600);
 scene.add(camera);
 
 // ============================================================ lights
 const sunDir=new THREE.Vector3(-0.70,0.20,-0.68).normalize();   // direction TOWARD the sun (NW, low)
-const hemi=new THREE.HemisphereLight(0xc4ad94,0x6a5340,1.35);scene.add(hemi);
-const sun=new THREE.DirectionalLight(0xffb06a,4.2);
+// phones: slightly less saturated light so biome colours (sand / scorch / grass / rock) survive ACES instead of all saturating to one orange
+const hemi=new THREE.HemisphereLight(MOBILE?0xd2c4b2:0xc4ad94,MOBILE?0x7a6858:0x6a5340,MOBILE?1.5:1.35);scene.add(hemi);
+const sun=new THREE.DirectionalLight(MOBILE?0xffc48c:0xffb06a,MOBILE?3.6:4.2);
 sun.castShadow=true;
-const SMAP=MOBILE?1024:2048;sun.shadow.mapSize.set(SMAP,SMAP);
+const SMAP=MOBILE?768:2048;sun.shadow.mapSize.set(SMAP,SMAP);
 {const sc=sun.shadow.camera;const E=MOBILE?34:46;sc.left=-E;sc.right=E;sc.top=E;sc.bottom=-E;sc.near=1;sc.far=220}
 sun.shadow.bias=-0.0004;sun.shadow.normalBias=0.05;
 scene.add(sun,sun.target);
@@ -200,6 +207,7 @@ function genTex(S,fn,{nStr=2.2,aniso=true}={}){
   return {map:mk(cA,true),rough:mk(cR,false),normal:mk(cN,false)};
 }
 const mixc=(a,b,t)=>[lerp(a[0],b[0],t),lerp(a[1],b[1],t),lerp(a[2],b[2],t)];
+await stage(0.06,'Preparing textures');
 const T={};
 T.rust=genTex(TS,(u,v)=>{
   // corrugated sheet: vertical ridges, patchy flaking paint, rust streaking from top
@@ -290,6 +298,7 @@ function glowTexture(inner='rgba(255,255,255,1)',mid='rgba(255,255,255,0.3)'){
   const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;return t;
 }
 
+await stage(0.16,'Building materials');
 // ============================================================ materials
 const M={};
 const stdTex=(tx,o={})=>new THREE.MeshStandardMaterial({map:tx.map,roughnessMap:tx.rough,normalMap:tx.normal,normalScale:new THREE.Vector2(o.ns??1,o.ns??1),vertexColors:true,metalness:o.metal??0.0,roughness:1,side:o.side??THREE.FrontSide,envMapIntensity:o.env??0.6});
@@ -308,6 +317,37 @@ M.glow=new THREE.MeshBasicMaterial({vertexColors:true,toneMapped:false,fog:false
 M.skin=new THREE.MeshStandardMaterial({color:0xffffff,vertexColors:true,roughness:0.75,metalness:0.0,envMapIntensity:0.3});
 M.cloth2=new THREE.MeshStandardMaterial({map:T.cloth.map,normalMap:T.cloth.normal,color:0xffffff,vertexColors:true,roughness:0.95,metalness:0,envMapIntensity:0.2});
 const groundMat=new THREE.MeshStandardMaterial({map:T.ground.map,roughnessMap:T.ground.rough,normalMap:T.ground.normal,normalScale:new THREE.Vector2(1.4,1.4),vertexColors:true,roughness:1,metalness:0,envMapIntensity:0.15});
+// ground shading hook. Mobile: the repeating crack texture is flattened (it read as one tiled brown grid) and replaced by per-pixel
+// world-space noise patches (pale sand, scorch, grey rock, dry grass). Pure ALU, no extra textures, no float textures.
+groundMat.onBeforeCompile=sh=>{
+  sh.vertexShader=sh.vertexShader.replace('#include <common>','#include <common>\nvarying vec2 vWP;').replace('#include <begin_vertex>','#include <begin_vertex>\nvWP=(modelMatrix*vec4(transformed,1.)).xz;');
+  sh.fragmentShader=sh.fragmentShader.replace('#include <common>',`#include <common>
+  varying vec2 vWP;
+  float gh(vec2 p){p=fract(p*vec2(.1031,.1030));p+=dot(p,p.yx+33.33);return fract((p.x+p.y)*p.x);}
+  float gn(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(gh(i),gh(i+vec2(1,0)),f.x),mix(gh(i+vec2(0,1)),gh(i+vec2(1,1)),f.x),f.y);}
+  float gf(vec2 p){return .55*gn(p)+.3*gn(p*2.13+7.1)+.15*gn(p*4.3+3.7);}`)
+  .replace('#include <map_fragment>',`#include <map_fragment>
+  #ifdef USE_MAP
+  { ${MOBILE?'':'/*desktop keeps the original texture contrast*/'}
+    ${MOBILE?`float tl=max(dot(diffuseColor.rgb,vec3(.333)),.04);
+    diffuseColor.rgb=mix(diffuseColor.rgb,diffuseColor.rgb/tl*.36,.88);`:''}
+    vec2 w=vWP;
+    float big=gf(w*.012+3.), mid=gf(w*.06+11.), fin=gf(w*.9+5.), sc=gf(w*.028+40.), pa=gf(w*.021+90.), gr=gf(w*.017+150.), rk=gf(w*.045+200.);
+    vec3 c=diffuseColor.rgb;
+    c=mix(vec3(dot(c,vec3(.333))),c,.5)*vec3(1.04,1.0,.94);               // pull the very saturated orange base toward neutral so patches can read
+    c*=mix(vec3(.70,.74,.80),vec3(1.30,1.14,.92),big);                      // large warm/cool drifts
+    c*=.72+.56*mid;                                                         // mid-scale light/dark mottling
+    c*=.82+.36*fin;                                                         // fine grit
+    c=mix(c,vec3(.20,.19,.19)*(.7+.6*fin),smoothstep(.52,.64,sc)*.9);     // dark scorched patches
+    c=mix(c,vec3(1.75,1.55,1.18)*(.8+.4*fin)*.52,smoothstep(.50,.62,pa)*.9);// pale sand / salt flats
+    c=mix(c,vec3(.50,.66,.26)*(.8+.4*fin)*.5,smoothstep(.50,.62,gr)*.9);  // dry grass patches
+    c=mix(c,vec3(dot(c,vec3(.333)))*vec3(.85,.95,1.15)*1.25,smoothstep(.52,.64,rk)*.85); // grey rubble
+    diffuseColor.rgb=c;
+  }
+  #endif`);
+};
+if(MOBILE){groundMat.normalMap=null;groundMat.roughnessMap=null;groundMat.roughness=0.95}   // no tiled normal/roughness maps on phones: they read as a repeating grid
+groundMat.customProgramCacheKey=()=>'ground2'+(MOBILE?'m':'d');
 for(const t of[T.ground,T.asphalt]){t.map.repeat.set(1,1)}
 
 // ============================================================ geometry batcher (merged per material per spatial cell)
@@ -398,26 +438,39 @@ function resolveCircle(p,pr){
   return hit;
 }
 
+await stage(0.22,'Shaping the wasteland');
 // ============================================================ terrain mesh
 const world=new THREE.Group();scene.add(world);
 const sceneBatch=new Batcher(72);
 {
-  const SEG=MOBILE?190:300;
+  const SEG=MOBILE?240:300;
   const g=new THREE.PlaneGeometry(HALF*2,HALF*2,SEG,SEG).rotateX(-Math.PI/2);
   const p=g.attributes.position,n=p.count,cols=new Float32Array(n*3),uv=g.attributes.uv;
   for(let i=0;i<n;i++)p.setY(i,terrainH(p.getX(i),p.getZ(i)));
-  const cDust=new THREE.Color(0xb48e63),cDark=new THREE.Color(0x6a4f3a),cGrey=new THREE.Color(0x8d8379),cClay=new THREE.Color(0xa6623d),cAsh=new THREE.Color(0x5d554e);
+  // biome palette (sRGB-ish values, vertex colours are used as linear multipliers on the soft ground texture)
+  const cDust=new THREE.Color(0xc09566),cSand=new THREE.Color(0xd8b878),cGrass=new THREE.Color(0x9a8a4a),cDry=new THREE.Color(0xb59a58),
+        cClay=new THREE.Color(0xb0643a),cRock=new THREE.Color(0x7f7568),cRockD=new THREE.Color(0x5c5047),cAsh=new THREE.Color(0x3f3934),cCrack=new THREE.Color(0x6a4b36);
   const c=new THREE.Color();
   for(let i=0;i<n;i++){
     const x=p.getX(i),z=p.getZ(i),y=p.getY(i);
     const sl=Math.hypot(terrainH(x+1.5,z)-y,terrainH(x,z+1.5)-y)/1.5;
-    const t1=fbm(x*0.018+3,z*0.018,3),t2=fbm(x*0.07+9,z*0.07,2),t3=fbm(x*0.011+70,z*0.011,3);
-    c.copy(cDust).lerp(cClay,sm(0.45,0.72,t1)*0.65).lerp(cGrey,sm(0.5,0.78,t3)*0.7);
-    c.lerp(cAsh,sm(0.58,0.82,t2)*0.5*sm(0.4,0.65,t3));
-    c.lerp(cDark,sm(0.2,0.8,sl)*0.75);
-    // dust drifts darker/lighter along the road shoulder
-    const rd=Math.abs(x-roadX(z));c.lerp(cDust,(1-sm(3,16,rd))*0.55);
-    const l=0.86+0.22*(t2-0.5)+clamp(y*0.01,-0.1,0.1);
+    const tBig=fbm(x*0.006+31,z*0.006,3),tMid=fbm(x*0.02+3,z*0.02,3),tFine=fbm(x*0.12+9,z*0.12,2),tScorch=fbm(x*0.012+70,z*0.012,3),tSand=fbm(x*0.008+120,z*0.008,2),tGrass=fbm(x*0.015+200,z*0.015,3);
+    // base: dust, shifted by big-scale hue regions
+    c.copy(cDust).lerp(cSand,sm(0.5,0.72,tSand)*0.85);
+    c.lerp(cClay,sm(0.46,0.7,tBig)*0.75);
+    c.lerp(cDry,sm(0.5,0.75,tGrass)*0.6*(1-sm(0.35,0.7,sl)));
+    c.lerp(cGrass,sm(0.62,0.82,tGrass)*0.55*(1-sm(0.3,0.6,sl)));
+    // slope rock: steep faces go grey/brown, with layered banding by height
+    const band=0.5+0.5*Math.sin(y*0.9+tMid*6);
+    c.lerp(cRock,sm(0.28,0.6,sl)*0.9);c.lerp(cRockD,sm(0.5,1.0,sl)*(0.45+0.4*band));
+    // dark scorched patches
+    c.lerp(cAsh,sm(0.60,0.74,tScorch)*0.82*(1-sm(0.9,1.4,sl)));
+    // cracked mud fines
+    c.lerp(cCrack,sm(0.66,0.8,tMid)*0.35);
+    // dusty shoulder along the road
+    const rd=Math.abs(x-roadX(z));c.lerp(cDust,(1-sm(3,14,rd))*0.5);
+    // light/dark variation: large + fine noise, altitude shading
+    const l=0.78+0.5*(tMid-0.5)+0.32*(tFine-0.5)+0.22*(tBig-0.5)+clamp(y*0.008,-0.1,0.12);
     cols[i*3]=c.r*l;cols[i*3+1]=c.g*l;cols[i*3+2]=c.b*l;
     uv.setXY(i,(x+HALF)/22,(z+HALF)/22);
   }
@@ -464,6 +517,7 @@ const sceneBatch=new Batcher(72);
   lines.receiveShadow=true;lines.renderOrder=2;world.add(lines);
 }
 
+await stage(0.38,'Laying the road');
 // ============================================================ geometry helpers
 // merge a list of {geo,m,hex} into one vertex-coloured geometry
 function mergeParts(list){
@@ -1143,6 +1197,7 @@ const towerBlinks=[];
     for(const sx of[-0.9,0,0.9])b.box('concrete',sx,7.92,0,0.07,0.12,0.07,0xaaa090,0,0,0);}
   const wp=[];for(let z=-330;z<=-HZ-14;z+=34)wp.push(z);
 }
+await stage(0.55,'Scattering rocks and wrecks');
 // grass tufts (instanced crossed quads)
 {
   const tex=tuftTexture();
@@ -1160,6 +1215,7 @@ const towerBlinks=[];
   im.count=k;im.castShadow=false;im.receiveShadow=false;im.frustumCulled=false;world.add(im);
   // haven edge weeds/sprigs
 }
+await stage(0.66,'Raising Rust Haven');
 B_STATIC.build(world);
 HB.build(haven);
 { // wires
@@ -1505,6 +1561,8 @@ let GLB=null;
 async function loadGLB(){
   const mgr=new THREE.LoadingManager();
   mgr.setURLModifier(u=>MOBILE?u.replace('/tex1k/','/tex512/'):u);
+  mgr.onProgress=(u,i,n)=>setProg(0.74+0.1*(i/Math.max(n,1)),'Loading survivors '+i+'/'+n);
+  mgr.onError=u=>(window.__dbgLog||console.log)('error','Failed to load '+u);
   const L=new GLTFLoader(mgr);
   const [gm,gf,ga]=await Promise.all([L.loadAsync('./models/char/Superhero_Male_FullBody.gltf'),L.loadAsync('./models/char/Superhero_Female_FullBody.gltf'),L.loadAsync('./models/anims.glb')]);
   return setupGLB(gm,gf,ga);
@@ -1540,7 +1598,7 @@ function setupGLB(gm,gf,ga){
   // skin tone materials
   G.skin={};
   const tones=[[1,0.97,0.94],[0.9,0.8,0.7],[0.78,0.64,0.52],[0.62,0.48,0.38],[0.5,0.38,0.31]];
-  for(const key of['m','f']){G.skin[key]=tones.map(t=>{const m=G.models[key].body.material.clone();m.metalnessMap=null;m.metalness=0;m.color.setRGB(t[0]*0.92,t[1]*0.9,t[2]*0.88);m.envMapIntensity=0.3;m.roughness=1;return m})}
+  for(const key of['m','f']){G.skin[key]=tones.map(t=>{const m=G.models[key].body.material.clone();m.metalnessMap=null;m.metalness=0;m.color.setRGB(t[0]*0.92,t[1]*0.9,t[2]*0.88);m.envMapIntensity=0.3;m.roughness=1;m.vertexColors=false;patchBodyMat(m);return m})}
   for(const key of['m','f']){const mm=G.models[key];if(mm.brows)mm.brows.material.metalness=0;if(mm.eyes)mm.eyes.material.metalness=0}
   return G;
 }
@@ -1582,9 +1640,7 @@ function buildOutfit(mod,s){
   const O=new Outfit(),bi=n=>mod.idx[n],H=mod.head,female=s.female;
   const longSleeve=s.longSleeve;
   // base clothes derived from the body mesh
-  O.cloth(mod,(r,x,y)=>r==='pelvis'||r==='thigh'||(r==='calf'&&y>0.22),0.010,s.pants,{noise:0.22});
-  O.cloth(mod,(r,x,y)=>r==='foot'||(r==='calf'&&y<=0.29),0.019,s.boots??0x2a211a,{noise:0.12});
-  O.cloth(mod,(r,x,y)=>r==='spine'||r==='clav'||r==='uarm'||(longSleeve&&r==='larm'),0.016,s.shirt,{noise:0.2});
+  // trousers / boots / shirt colours are baked into the skinned body (bodyColorGeo); only jacket & gear are separate geometry
   if(s.jacket!=null){
     if(s.vest)O.cloth(mod,(r,x,y)=>(r==='spine'||r==='clav')&&y>1.1,0.030,s.jacket,{noise:0.16});
     else O.cloth(mod,(r,x,y)=>(r==='spine'||r==='clav'||r==='uarm'||r==='larm')&&y>1.1,0.030,s.jacket,{noise:0.16});
@@ -1638,7 +1694,45 @@ function buildOutfit(mod,s){
       O.rigid(new THREE.TorusGeometry(0.037,0.008,5,12),TM(sd*hx*0.42,gy,cz+hz*1.02),hid,0x1a1612)}}
   return O.build();
 }
-// skin mesh trimmed to the parts clothes do not cover (halves triangle count per human)
+
+// body shader hook: clothing colours baked per-vertex (aCol, aCl) are blended over the painted skin texture, keeping its muscle shading.
+// Uses only plain attributes/varyings (no float textures, no extra samplers) so it is safe on low-end mobile GPUs.
+function patchBodyMat(m){
+  m.onBeforeCompile=sh=>{
+    sh.vertexShader=sh.vertexShader.replace('#include <common>','#include <common>\nattribute vec3 aCol;attribute float aCl;varying vec3 vCl;varying float vCa;')
+      .replace('#include <begin_vertex>','#include <begin_vertex>\nvCl=aCol;vCa=aCl;');
+    sh.fragmentShader=sh.fragmentShader.replace('#include <common>','#include <common>\nvarying vec3 vCl;varying float vCa;')
+      .replace('#include <map_fragment>','#include <map_fragment>\n#ifdef USE_MAP\nfloat tl=dot(texture2D(map,vMapUv).rgb,vec3(.333));\n#else\nfloat tl=.19;\n#endif\ndiffuseColor.rgb=mix(diffuseColor.rgb,vCl*clamp(.55+.45*tl/.19,.5,1.5),vCa);');
+  };
+  m.customProgramCacheKey=()=>'bodyclothes1';
+}
+const bodyGeoCache=new Map();
+function bodyColorGeo(mod,spec){
+  const key=(spec.female?'f':'m')+'|'+spec.shirt+'|'+spec.pants+'|'+(spec.boots??0x2a211a)+'|'+spec.longSleeve+'|'+(spec.seed|0);
+  let g=bodyGeoCache.get(key);if(g)return g;
+  const src=mod.body.geometry,P=src.attributes.position,SI=src.attributes.skinIndex,SW=src.attributes.skinWeight,N=P.count,bones=mod.bones;
+  const cS=new THREE.Color(spec.shirt),cP=new THREE.Color(spec.pants),cB=new THREE.Color(spec.boots??0x2a211a);
+  const col=new Float32Array(N*3),cl=new Float32Array(N);
+  const isShirt=/^(spine_|clavicle|upperarm)/,isArm=/^lowerarm/,isPants=/^(root|pelvis|thigh)/,isCalf=/^calf/,isFoot=/^(foot|ball)/;
+  for(let i=0;i<N;i++){
+    let sh=0,pa=0,bo=0;const y=P.getY(i);
+    for(let k=0;k<4;k++){const w=SW.getComponent(i,k);if(w<=0)continue;const nm=bones[SI.getComponent(i,k)].name;
+      if(isShirt.test(nm))sh+=w;else if(isArm.test(nm)){if(spec.longSleeve)sh+=w*sm(0.0,1.0,1)}
+      else if(isPants.test(nm))pa+=w;else if(isCalf.test(nm)){const b=1-sm(0.2,0.36,y);bo+=w*b;pa+=w*(1-b)}else if(isFoot.test(nm))bo+=w}
+    const a=sh+pa+bo;const cov=sm(0.32,0.72,a);
+    const inv=a>1e-4?1/a:0;const x=P.getX(i),z=P.getZ(i);
+    // fabric mottling + dirt gradient (darker towards the ground, grimy hems)
+    const nz=0.82+0.3*vnoise(x*17+z*11,y*17)+0.12*vnoise(x*4.3,y*4.3+z*3);
+    const dirt=0.7+0.3*sm(0.0,1.2,y);
+    const r=(cS.r*sh+cP.r*pa+cB.r*bo)*inv*nz*dirt,gg=(cS.g*sh+cP.g*pa+cB.g*bo)*inv*nz*dirt,b2=(cS.b*sh+cP.b*pa+cB.b*bo)*inv*nz*dirt;
+    col[i*3]=r;col[i*3+1]=gg;col[i*3+2]=b2;cl[i]=cov*0.97;
+  }
+  g=new THREE.BufferGeometry();for(const n in src.attributes)g.setAttribute(n,src.attributes[n]);
+  g.setIndex(src.index);g.setAttribute('aCol',new THREE.BufferAttribute(col,3));g.setAttribute('aCl',new THREE.BufferAttribute(cl,1));
+  g.boundingSphere=src.boundingSphere;g.boundingBox=src.boundingBox;
+  bodyGeoCache.set(key,g);return g;
+}
+// (legacy trimmed-body helper kept but unused: the full body is always drawn now)
 const trimCache=new Map();
 function trimmedBodyGeo(mod,female,longSleeve){
   const k=(female?'f':'m')+longSleeve;let g=trimCache.get(k);if(g)return g;
@@ -1667,18 +1761,18 @@ function createHumanGLB(o={}){
   const clone=SkeletonUtils.clone(mod.scene);
   const spec={female,shirt:o.shirt??pal.shirt,pants:o.pants??pal.pants,jacket:o.jacket===null?null:(o.jacket??pal.jacket),vest:!!o.vest,longSleeve:o.longSleeve??(R()<0.7),
     boots:o.boots,scarf:o.scarf||0,pack:o.pack!==false&&(o.pack??R()<0.6),packCol:o.packCol,rollCol:o.rollCol,hat:o.hat??(female&&R()<0.5?'hair':pick(['cap','beanie','hair','hair'])),hatCol:o.hatCol,hair:o.hair,beard:!female&&o.beard,mask:o.mask||0,goggles:o.goggles,holster:o.holster,pads:o.pads||0,longHair:o.longHair,unique:!!o.unique};
-  const key=[spec.shirt,spec.pants,spec.jacket,spec.vest,spec.longSleeve,spec.scarf,spec.pack,spec.packCol,spec.rollCol,spec.hat,spec.hatCol,spec.hair,spec.beard,spec.mask,spec.goggles,spec.holster,spec.pads].join(',');
+  const key=[spec.jacket,spec.vest,spec.longSleeve,spec.scarf,spec.pack,spec.packCol,spec.rollCol,spec.hat,spec.hatCol,spec.hair,spec.beard,spec.mask,spec.goggles,spec.holster,spec.pads].join(',');
   const ogeo=getOutfitGeo(mod,key,spec,o.cls||'npc');
   let body=null,eyes=null,brows=null;
   clone.traverse(n=>{if(n.isSkinnedMesh){if(/superhero/i.test(n.name))body=n;else if(/eyes/i.test(n.name))eyes=n;else if(/brow/i.test(n.name))brows=n}});
   const tone=o.tone??Math.floor(R()*5);
-  body.material=GLB.skin[female?'f':'m'][tone];body.geometry=trimmedBodyGeo(mod,female,spec.longSleeve);
+  body.material=GLB.skin[female?'f':'m'][tone];spec.seed=o.hero?7:(Math.floor(R()*6));body.geometry=bodyColorGeo(mod,spec);
   const om=new THREE.SkinnedMesh(ogeo,M.cloth2);om.bind(body.skeleton,body.bindMatrix);om.name='outfit';body.parent.add(om);
   const meshes=[body,om];if(eyes)meshes.push(eyes);if(brows)meshes.push(brows);
-  for(const m of meshes){m.castShadow=true;m.receiveShadow=false;m.frustumCulled=true}
+  for(const m of meshes){m.castShadow=true;m.receiveShadow=false;m.frustumCulled=false}   // skinned bounds are unreliable on some mobile drivers; we cull per-human below
   const root=new THREE.Group();root.add(clone);
   const sy=o.scale??(0.95+R()*0.1),sx=o.wscale??(0.94+R()*0.12);root.scale.set(sx,sy,sx);
-  const H={root,glb:true,clone,body,om,eyes,brows,female,mixer:new THREE.AnimationMixer(clone),acts:{},cur:{},gait:'idle',
+  const H={root,glb:true,noCull:!!o.noCull,clone,body,om,eyes,brows,female,mixer:new THREE.AnimationMixer(clone),acts:{},cur:{},gait:'idle',
     phase:0,speed:0,aim:0,swing:0,dead:0,talk:0,seed:Math.random()*100,weapon:null,weapons:{},bones:{},osT:0,fireT:0,hitT:0,reloading:false,_sw:0,_dead:false,lodT:Math.random(),accT:0,
     head:new THREE.Object3D(),hips:new THREE.Object3D(),spine:new THREE.Object3D()};
   clone.traverse(n=>{if(n.isBone)H.bones[n.name]=n});
@@ -1708,14 +1802,20 @@ function setLayer(H,layer,key,ts,{once=false,force=false,fade=0.2,syncTo=null}={
   if(syncTo&&!once)a.time=syncTo.time%dur;else if(!once)a.time=((H.seed*0.37)%1)*dur;
   a.fadeIn(fade).play();if(cur&&cur.a!==a)cur.a.fadeOut(fade);H.cur[layer]={key,a};
 }
-const _cd=new THREE.Vector3();
+const _cd=new THREE.Vector3(),_cs=new THREE.Sphere(),HFRUSTUM=new THREE.Frustum(),_hpv=new THREE.Matrix4();
+function updateHFrustum(){camera.updateMatrixWorld();_hpv.multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse);HFRUSTUM.setFromProjectionMatrix(_hpv)}
 function animateGLB(H,dt,time,opts={}){
   const ranged=H.weapon==='pistol'||H.weapon==='shotgun';
   // distance LOD for animation cost + face meshes
   if(H.root.visible){
     H.root.getWorldPosition(_cd);const d2=_cd.distanceToSquared(camera.position);
+    _cs.center.copy(_cd);_cs.center.y+=1.0;_cs.radius=2.6;
+    const inView=H.noCull||d2<9||(d2<(MOBILE?120*120:220*220)&&HFRUSTUM.intersectsSphere(_cs));
+    if(H.inView!==inView){H.inView=inView;H.clone.visible=inView}
+    if(!inView&&H.dead<=0){H.accT+=dt;if(H.accT<0.5)return}
     const far=d2>70*70;
     if(H.eyes)H.eyes.visible=d2<22*22;if(H.brows)H.brows.visible=d2<22*22;
+    if(MOBILE){const cs=d2<30*30;if(H.shadowOn!==cs){H.shadowOn=cs;H.body.castShadow=cs;H.om.castShadow=cs}}
     H.accT+=dt;if(far&&(H.lodT+=dt)<0.2&&!H.dead){return}
     if(far)H.lodT=0;
     dt=H.accT;H.accT=0;
@@ -1752,7 +1852,9 @@ function animateGLB(H,dt,time,opts={}){
 }
 // ---------- fallback-capable wrappers
 
-try{GLB=await loadGLB()}catch(e){console.warn('GLB humans failed -> procedural fallback',e);GLB=null}
+await stage(0.74,'Loading survivors');
+try{GLB=await loadGLB()}catch(e){console.warn('GLB humans failed -> procedural fallback',e);(window.__dbgLog||console.log)('error','Character models failed to load ('+(e&&e.message||e)+') - using simple fallback humans');GLB=null}
+await stage(0.86,'Dressing survivors');
 window.__glb=!!GLB;
 function createHuman(o={}){return GLB?createHumanGLB(o):createHumanProc(o)}
 function animateHuman(H,dt,time,opts){return H.glb?animateGLB(H,dt,time,opts||{}):animateHumanProc(H,dt,time,opts||{})}
@@ -1795,12 +1897,13 @@ towerSpots.forEach((t,i)=>{addNPC(t.x+Math.sin(i)*0.2,t.z+0.3,[Math.PI,Math.PI,0
 const walkRoutes=[[[2.5,-22],[2.5,22]],[[-3.5,20],[-3.5,-18]],[[0,-8],[4,-8],[4,10],[0,10]]];
 walkRoutes.forEach((wp,i)=>addNPC(wp[0][0],wp[0][1],0,{...randLook(),kind:'walk',wp,speed:1.2+i*0.15}));
 if(MOBILE){/* cull a third of far NPCs to keep draw calls modest */
-  npcs.filter(n=>n.kind==='idle'&&n.role!=='vendor'&&n.role!=='mechanic').forEach((n,i)=>{if(i%3===2){ents.remove(n.H.root);n.dead=true}});
+  npcs.filter(n=>n.kind==='idle'&&n.role!=='vendor'&&n.role!=='mechanic').forEach((n,i)=>{if(i%2===1){ents.remove(n.H.root);n.dead=true}});
 }
 
+await stage(0.94,'Waking the settlement');
 // ============================================================ player
 const P={x:SPAWN.x,z:SPAWN.z,y:0,yaw:Math.PI,vy:0,hp:100,hunger:82,thirst:68,ammo:12,reserve:36,money:45,rep:2,wanted:0,wantedT:0,speed:0,aim:0,swingT:0,swingCool:0,shotCool:0,inCar:false,hasPart:false,mission:0,dead:false,reload:0,hurtT:0};
-const hero=createHuman({hero:true,unique:true,cls:'hero',female:false,tone:1,scale:1,wscale:1,longSleeve:true,hat:'cap',hatCol:0x6a2f2a,beard:true,hair:0x2a1e14,pack:true,packCol:0x5a6240,rollCol:0x8a3a2a,scarf:0x8a3a2a,goggles:false,holster:true,jacket:0x6a4a2a,shirt:0x5a5a40,pants:0x3e3a34,weapon:'pipe',pal:null});
+const hero=createHuman({hero:true,noCull:true,unique:true,cls:'hero',female:false,tone:1,scale:1,wscale:1,longSleeve:true,hat:'cap',hatCol:0x6a2f2a,beard:true,hair:0x2a1e14,pack:true,packCol:0x5a6240,rollCol:0x8a3a2a,scarf:0x8a3a2a,goggles:false,holster:true,jacket:0x6a4a2a,shirt:0x5a5a40,pants:0x3e3a34,weapon:'pipe',pal:null});
 ents.add(hero.root);
 // goggles pushed up on cap
 hero.root.position.set(P.x,0,P.z);
@@ -2290,7 +2393,7 @@ assembleGlows();
 const sunSprite=new THREE.Vector3();
 const clock=new THREE.Clock();let hudT=0,fpsAcc=0,fpsN=0;
 function tick(dt){
-  time+=dt;gameT+=dt;
+  time+=dt;gameT+=dt;updateHFrustum();
   updatePlayer(dt);
   focus.set(P.x,P.y,P.z);
   updateRaiders(dt);updateNPCs(dt);updateCarVisual(dt);updateInteractions(dt);
@@ -2328,8 +2431,21 @@ function tick(dt){
   }
   if(toastT>0){toastT-=dt;if(toastT<=0)el.toast.style.opacity=0}
 }
+
+// ---- adaptive resolution: if the phone can't hold ~24 fps, drop the render scale in steps (and raise it again if there is headroom)
+let _fpsAcc=0,_fpsN=0,_adaptCool=4;
+function updateAdaptive(dt){
+  if(!MOBILE||window.__paused)return;
+  _fpsAcc+=dt;_fpsN++;_adaptCool-=dt;
+  if(_fpsAcc>=2.0){const fps=_fpsN/_fpsAcc;_fpsAcc=0;_fpsN=0;window.__fps=Math.round(fps);
+    if(_adaptCool<=0){
+      if(fps<22&&PR>0.7){PR=Math.max(0.7,PR-0.2);renderer.setPixelRatio(PR);resize();_adaptCool=3}
+      else if(fps>50&&PR<PR_MAX){PR=Math.min(PR_MAX,PR+0.15);renderer.setPixelRatio(PR);resize();_adaptCool=6}
+    }}
+}
 function frame(){
   const _dt=Math.min(clock.getDelta(),0.05);if(!window.__paused)tick(_dt);
+  updateAdaptive(_dt);
   if(composer)composer.render(0.016);else renderer.render(scene,camera);
   requestAnimationFrame(frame);
 }
@@ -2355,4 +2471,4 @@ window.__game={
   fire(){return fireBarrels.length}
 };
 window.__loaded=true;
-requestAnimationFrame(()=>{frame();setTimeout(()=>{const l=$('loading');if(l){l.style.opacity=0;setTimeout(()=>l.remove(),900)}window.__ready=true},300)});
+requestAnimationFrame(()=>{frame();setProg(1,'Ready');setTimeout(()=>{const l=$('loading');if(l){l.style.opacity=0;setTimeout(()=>l.remove(),900)}window.__ready=true},300)});

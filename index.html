@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="theme-color" content="#1b1410">
 <link rel="icon" href="data:,">
 <title>ASHFALL — Rust Haven</title>
 <script type="importmap">
@@ -10,7 +11,7 @@
 </script>
 <style>
   :root{--amber:#e9b970;--paper:#f2dcb8;--dim:#bfa27e;--red:#b7352a;--ink:rgba(14,9,5,.62)}
-  html,body{margin:0;height:100%;background:#1b1410;overflow:hidden;font-family:"Barlow Condensed","Arial Narrow","Trebuchet MS",Roboto,sans-serif;color:var(--paper);-webkit-user-select:none;user-select:none;touch-action:none;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;overscroll-behavior:none;-webkit-touch-callout:none;background:#1b1410;overflow:hidden;font-family:"Barlow Condensed","Arial Narrow","Trebuchet MS",Roboto,sans-serif;color:var(--paper);-webkit-user-select:none;user-select:none;touch-action:none;-webkit-tap-highlight-color:transparent}
   canvas#c{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none}
   .panel{background:linear-gradient(180deg,rgba(24,16,10,.66),rgba(14,9,5,.52));border:1px solid rgba(233,185,112,.28);box-shadow:0 2px 14px rgba(0,0,0,.45);border-radius:3px;backdrop-filter:blur(2px)}
   #brand{position:fixed;left:16px;top:12px;pointer-events:none;text-shadow:0 2px 8px rgba(0,0,0,.8)}
@@ -64,14 +65,39 @@
   #btns button.on{background:rgba(233,185,112,.5)}
   body.mobile #stick,body.mobile #btns{display:block}
   body.mobile #hint{display:none}
-  body.mobile #weapon{bottom:auto;top:150px;padding:4px 10px}
-  body.mobile #bottomLeft{bottom:170px}
-  body.mobile #mission{max-width:30vw;right:150px}
   body.mobile #mTitle{font-size:14px}body.mobile #mSub{display:none}
-  body.mobile #stats{width:170px}
-  body.mobile #brand h1{font-size:22px}
-  #loading{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#1b1410;color:#efc58e;letter-spacing:.5em;font:900 22px Impact,sans-serif;z-index:5;transition:opacity .8s}
-  #err{position:fixed;left:10px;bottom:30px;right:10px;color:#ff9a7a;font:12px monospace;white-space:pre-wrap;z-index:9;pointer-events:none}
+  #loading{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:radial-gradient(ellipse at center,#2a1d14,#150f0b);color:#efc58e;z-index:5;transition:opacity .8s;text-align:center;padding:0 24px}
+  #loading h2{margin:0;font:900 30px/1 Impact,"Arial Black",sans-serif;letter-spacing:.4em;text-indent:.4em}
+  #loading .sub{font-size:12px;letter-spacing:.3em;color:var(--dim);text-transform:uppercase}
+  #lbar{width:min(320px,70vw);height:8px;border:1px solid rgba(233,185,112,.5);border-radius:2px;padding:1px;box-sizing:border-box}
+  #lbar i{display:block;height:100%;width:2%;background:linear-gradient(90deg,#8f4a1c,#e9b970);transition:width .25s}
+  #ltxt{font-size:13px;letter-spacing:.2em;color:#d9bf98;min-height:16px}
+  #lerr{display:none;max-width:520px;color:#ffb59a;font:600 15px/1.35 "Trebuchet MS",Arial,sans-serif;letter-spacing:.02em;background:rgba(80,20,10,.45);border:1px solid rgba(255,140,100,.5);padding:12px 16px;border-radius:4px}
+  #lerr button{margin-top:10px;font:700 14px "Trebuchet MS",sans-serif;padding:9px 18px;border-radius:4px;border:1px solid #e9b970;background:#3a2616;color:#ffe9c4}
+  #dbg{position:fixed;left:4px;right:4px;top:4px;max-height:42vh;overflow:auto;background:rgba(0,0,0,.78);color:#8f8;font:10px/1.25 monospace;white-space:pre-wrap;z-index:50;padding:4px 6px;border-radius:3px;pointer-events:none;display:none}
+  #dbg .e{color:#ff8a7a}#dbg .w{color:#ffd27a}
+  #rot{display:none;position:fixed;inset:0;z-index:40;background:rgba(18,12,8,.94);color:#efc58e;align-items:center;justify-content:center;text-align:center;font:700 20px/1.4 "Trebuchet MS",sans-serif;letter-spacing:.06em;padding:30px}
+  @media (orientation:portrait) and (pointer:coarse){#rot{display:flex}}
+  /* phones: respect notches / home bar, bigger thumb targets */
+  body.mobile #brand{left:max(14px,env(safe-area-inset-left));top:max(8px,env(safe-area-inset-top))}
+  body.mobile #brand h1{font-size:19px}body.mobile #brand div{display:none}
+  body.mobile #stats{left:max(14px,env(safe-area-inset-left));top:calc(max(8px,env(safe-area-inset-top)) + 24px);width:150px;padding:5px 8px}
+  body.mobile .row{margin:0 0 3px}body.mobile .row label{font-size:9px;width:44px}body.mobile .bar{height:8px}
+  body.mobile #topRight{right:max(12px,env(safe-area-inset-right));top:max(8px,env(safe-area-inset-top))}
+  body.mobile #mmwrap,body.mobile #mm{width:92px;height:92px}
+  body.mobile #mission{right:calc(max(12px,env(safe-area-inset-right)) + 100px);top:max(8px,env(safe-area-inset-top));max-width:32vw;padding:5px 9px}
+  body.mobile #mission .h{font-size:8px}
+  body.mobile #bottomLeft{display:none}
+  body.mobile #weapon{top:108px;right:calc(max(12px,env(safe-area-inset-right)) + 0px);bottom:auto;padding:3px 9px}
+  body.mobile #ammo b{font-size:24px}body.mobile #ammo span{font-size:13px}body.mobile #wname{font-size:9px}
+  body.mobile #stick{left:calc(max(18px,env(safe-area-inset-left)) + 6px);bottom:calc(max(22px,env(safe-area-inset-bottom)) + 6px);width:150px;height:150px}
+  body.mobile #stick:before{content:"";position:absolute;inset:-34px}   /* generous invisible hit area around the stick */
+  body.mobile #knob{width:64px;height:64px;margin:-32px 0 0 -32px}
+  body.mobile #btns{right:max(12px,env(safe-area-inset-right));bottom:max(16px,env(safe-area-inset-bottom));width:250px;height:210px}
+  body.mobile #btns button{width:72px;height:72px;font-size:13px;-webkit-appearance:none;appearance:none;padding:0}
+  body.mobile #prompt{bottom:30%;font-size:14px;padding:6px 12px}
+  body.mobile #toast{top:60px;font-size:14px}
+  body.mobile #money{font-size:16px;padding:3px 9px}
   body.shot #hint{display:none}
 </style>
 </head>
@@ -109,8 +135,36 @@
   <button id="bRun" style="right:150px;bottom:6px;width:56px;height:56px">RUN</button>
   <button id="bReload" style="right:150px;bottom:150px;width:50px;height:50px">R</button>
 </div>
-<div id="loading">LOADING…</div>
-<div id="err"></div>
-<script type="module" src="./game.js"></script>
+<div id="loading"><h2>ASHFALL</h2><div class="sub">Rust Haven · Year 31</div><div id="lbar"><i></i></div><div id="ltxt">Starting…</div><div id="lerr"></div></div>
+<div id="dbg"></div>
+<div id="rot">Please rotate your phone to <br>LANDSCAPE to play.<br><small style="font-size:13px;opacity:.7;letter-spacing:.03em">(and turn on auto-rotate)</small></div>
+<script>
+(function(){
+  var Q=new URLSearchParams(location.search),DBG=Q.get('debug')==='1',box=document.getElementById('dbg'),n=0;
+  if(DBG)box.style.display='block';
+  var log=window.__dbgLog=function(kind,msg){
+    if(kind==='error'){window.__errs=(window.__errs||[]);window.__errs.push(msg)}
+    if(!DBG)return;var d=document.createElement('div');d.className=kind==='error'?'e':(kind==='warn'?'w':'');d.textContent=(++n)+' '+kind+': '+String(msg).slice(0,400);box.appendChild(d);box.scrollTop=1e9;
+  };
+  ['log','warn','error'].forEach(function(k){var o=console[k];console[k]=function(){try{log(k,[].slice.call(arguments).map(function(a){return a&&a.message?a.message:String(a)}).join(' '))}catch(e){}o.apply(console,arguments)}});
+  window.addEventListener('unhandledrejection',function(e){log('error','promise: '+(e.reason&&e.reason.message||e.reason))});
+  window.addEventListener('error',function(e){log('error',(e.message||'error')+' '+(e.filename||'').split('/').pop()+':'+(e.lineno||''));
+    if(e.target&&e.target!==window&&(e.target.src||e.target.href))window.__fail&&window.__fail('A game file failed to download: '+(e.target.src||e.target.href).split('/').slice(-2).join('/')+'. Check your connection and retry.')},true);
+  var bar=document.querySelector('#lbar i'),txt=document.getElementById('ltxt'),le=document.getElementById('lerr');
+  window.__prog=function(p,t){bar.style.width=Math.max(2,Math.min(100,p*100))+'%';if(t)txt.textContent=t};
+  window.__fail=function(msg){if(window.__ready||window.__failed)return;window.__failed=true;le.style.display='block';le.innerHTML='';var d=document.createElement('div');d.textContent=msg;le.appendChild(d);
+    var b=document.createElement('button');b.textContent='Retry';b.onclick=function(){location.reload()};le.appendChild(b);
+    var sm=document.createElement('div');sm.style.cssText='font:11px monospace;opacity:.7;margin-top:8px';sm.textContent='Tip: add ?debug=1 to the address to see technical details.';le.appendChild(sm);txt.textContent='Could not start'};
+  // watchdog: module never started (old browser / blocked script) or init crashed
+  setTimeout(function(){if(!window.__loaded&&!window.__ready){window.__fail('The game is taking too long to start. Your browser may be too old, or the connection is slow. You can wait or retry.')}},45000);
+  window.addEventListener('error',function(e){if(!window.__ready&&e.error)window.__fail('Something went wrong while starting the game: '+(e.message||'unknown error'))});
+  window.addEventListener('unhandledrejection',function(e){if(!window.__ready)window.__fail('Something went wrong while starting the game: '+(e.reason&&e.reason.message||e.reason))});
+  ['gesturestart','gesturechange','dblclick'].forEach(function(k){document.addEventListener(k,function(e){e.preventDefault()})});
+  document.addEventListener('touchmove',function(e){if(e.touches.length>1||e.target.tagName==='CANVAS')e.preventDefault()},{passive:false});
+  document.addEventListener('contextmenu',function(e){e.preventDefault()});
+  if(!('noModule' in HTMLScriptElement.prototype))window.__fail('This browser is too old to run the game. Please update Chrome or Safari.');
+})();
+</script>
+<script type="module" src="./game.js?v=3"></script>
 </body>
 </html>
