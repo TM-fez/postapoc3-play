@@ -1,0 +1,6 @@
+ASHFALL (alpha) - third-party assets
+- Characters "Superhero Male/Female" and Universal Animation Library: Quaternius, CC0 (via CC0 redistribution, see assets/QUATERNIUS_REPO_LICENSE.txt)
+- Ground, rock, asphalt, concrete, brick, rust metal, wood, bark textures: ambientCG.com, CC0 (downscaled to 512 px)
+- Sound effects: Kenney (Impact, RPG, Sci-fi, Interface sounds) CC0; OpenGameArt gun reload sounds (SpringySpringo, zer0_sol) CC0;
+  Gunshot sounds by Vincent Sevedge (Tabasco, OpenGameArt) - treated as CC BY 3.0 (http://creativecommons.org/licenses/by/3.0/): credited here.
+- Engine: Godot 4.7.2 (MIT). Everything else (terrain, buildings, weapons, vehicles, UI icons) is procedural / hand-written for this project.
