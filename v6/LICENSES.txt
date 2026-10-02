@@ -1,0 +1,31 @@
+ASHFALL: RUST HAVEN (postapoc3) - third-party assets and licences
+==================================================================
+
+1) 3D characters: "Superhero" Male and Female (Universal Base Characters pack)
+   Author : Quaternius (https://quaternius.com)
+   Source : https://quaternius.itch.io/universal-base-characters
+   Licence: CC0 1.0 Universal (public domain dedication) - https://creativecommons.org/publicdomain/zero/1.0/
+   Files  : models/char/Superhero_Male_FullBody.gltf/.bin, models/char/Superhero_Female_FullBody.gltf/.bin
+            models/tex1k/*, models/tex512/* (body/eye textures, DOWNSCALED to 1024/512 px; hair/eye-normal textures not shipped)
+   Changes: glTF texture URIs rewritten to the downscaled textures; skin tint, trimmed body geometry and
+            clothing/gear geometry are generated at runtime (game.js).
+
+2) Animations: Universal Animation Library (UAL1)
+   Author : Quaternius
+   Source : https://quaternius.itch.io/universal-animation-library
+   Licence: CC0 1.0 Universal
+   File   : models/anims.glb (29 of the library's clips kept, meshes removed; root-motion and scale tracks are
+            stripped at load time so motion is in-place and driven by the game).
+
+   Both packs were obtained from a CC0 redistribution of the Quaternius files:
+   https://codeberg.org/jamesonBradfield/Quaternius_IK_Rigged_with_animations
+   (licence text: models/QUATERNIUS_REPO_LICENSE.txt, CC0).
+   CC0 requires no attribution; credit is given here as a courtesy: thank you, Quaternius.
+
+3) three.js r160 (three.module.js and addons/ incl. GLTFLoader, SkeletonUtils, post-processing, RoundedBoxGeometry)
+   Copyright (c) 2010-2023 three.js authors - MIT License - https://github.com/mrdoob/three.js
+
+Not used on purpose: the three.js example models Soldier.glb / Xbot.glb / Michelle.glb. They are Mixamo-derived
+(Adobe Mixamo terms, not CC0/CC-BY), so they were NOT included in this project.
+
+All other game art (terrain, props, vehicles, textures, audio, weapons) is generated procedurally in code.
