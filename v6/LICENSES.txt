@@ -28,4 +28,23 @@ ASHFALL: RUST HAVEN (postapoc3) - third-party assets and licences
 Not used on purpose: the three.js example models Soldier.glb / Xbot.glb / Michelle.glb. They are Mixamo-derived
 (Adobe Mixamo terms, not CC0/CC-BY), so they were NOT included in this project.
 
-All other game art (terrain, props, vehicles, textures, audio, weapons) is generated procedurally in code.
+
+4) Recorded sound effects (audio/*.mp3, v6) - trimmed, loudness-normalised, converted to small mono MP3s
+   a) Kenney "Impact Sounds", "RPG Audio", "Sci-fi Sounds", "Interface Sounds" - https://kenney.nl - CC0 1.0
+      Used for: footsteps (concrete/grass/wood/dirt), bullet impacts (metal/wood/dirt/flesh/glass), melee swing/hit,
+      doors, cloth/coin/leather handling, explosion body, UI ticks/clicks.
+   b) OpenGameArt "Gunshot Sounds" (cz, sks, mosin, shotty) - https://opengameart.org/ (submitted as CC0).
+      NOTE: the zip ships a creativecommons.txt reading "Copyright (c) 2009 Vincent Sevedge ... Creative Commons
+      Attribution 3.0 Unported" - the two statements disagree, so we treat it as CC-BY 3.0 and credit the author:
+      "Gunshot sounds by Vincent Sevedge (Tabasco on OpenGameArt), CC BY 3.0, http://creativecommons.org/licenses/by/3.0/".
+      Changes: cut to short clips, high-passed, normalised, re-encoded. Used for pistol / rifle / bolt-action / shotgun shots.
+   c) OpenGameArt "Gun reload sounds" (magazine, assault-rifle reload, shotgun cock) by SpringySpringo - CC0.
+   d) OpenGameArt "Shotgun Reload Sound effects" (rack, shell loading) by zer0_sol - CC0.
+   (Pack attributions for 4c/4d are from the download pages as recorded while building; please re-verify before
+   any commercial release.)
+   Synthesised in code (no recording): reverb impulse response (ConvolverNode), night insects, wind, low-health
+   heartbeat, combat music layer, engine/alarm/radio, gun "boom" low-end layer, positional/distance filtering.
+
+5) Vector icons (icons.js): hand-drawn for this project, no external assets.
+
+All other game art (terrain, props, vehicles, textures, weapons) is generated procedurally in code.
